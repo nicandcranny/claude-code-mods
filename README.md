@@ -6,6 +6,8 @@ Mods for [Claude Code](https://claude.com/claude-code), published as a plugin ma
 | --- | --- |
 | [control-tower](control-tower) | A live agent dashboard pane: Flightdeck's main-model vitals, permission gate, receipt and log on top, a costumed subagent list below |
 
+![Control Tower demo](control-tower/docs/demo.gif)
+
 ## Install
 
 In a Claude Code terminal session (2.1.287 or later):

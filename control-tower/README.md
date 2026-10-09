@@ -7,6 +7,8 @@ It merges two MIT-licensed mods:
 - [Flightdeck](https://github.com/scasella/claude-flightdeck) by Stephen Casella: main model, context, cost and rate limits, the advisor ("architect") timeline, the permission gate, the turn receipt and the session log.
 - [savvy-progress](https://github.com/johnnyvizz/claude-kit/tree/main/plugins/savvy-progress) by johnnyvizz: the subagent list (model, context, tokens, cost, time), the progress band above the prompt, and the `progress` / `step` tools.
 
+![Control Tower demo](docs/demo.gif)
+
 ![The 18 crab costumes](docs/crab-costumes.png)
 
 ## Install
