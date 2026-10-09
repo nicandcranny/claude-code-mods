@@ -1,0 +1,13 @@
+{
+  "name": "claude-code-mods",
+  "description": "Claude Code mods by nicandcranny",
+  "owner": {
+    "name": "nicandcranny"
+  },
+  "plugins": [
+    {
+      "name": "control-tower",
+      "source": "./control-tower"
+    }
+  ]
+}
