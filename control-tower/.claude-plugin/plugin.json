@@ -1,6 +1,6 @@
 {
   "name": "control-tower",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Control Tower: Flightdeck's live agent dashboard on top, savvy-progress's savvy-flow agents panel below, plus the progress band above the prompt",
   "author": {
     "name": "nicandcranny",

@@ -134,11 +134,17 @@ export type AgentRun = {
   stepNote?: string
   /** The crab's costume, handed out in order at spawn. */
   costume?: string
+  /** A running agent's latest tool call, described. */
+  doing?: string
+  /** The first line of a finished agent's answer. */
+  result?: string
 }
 
 export type SavvyPanel = {
   isCompact: boolean
   isDoneCollapsed: boolean
+  /** Every finished run, not only the latest few. */
+  showAllDone?: boolean
   autoOpenedFor: string
 }
 

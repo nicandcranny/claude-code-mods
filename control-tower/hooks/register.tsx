@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Hook, On, PluginOptions, Register, RenderInput } from 'claude-code'
+import type { EngineInterface, Hook, On, PluginOptions, Register, RenderElement, RenderInput } from 'claude-code'
 
 import type { AgentCard, Architect, Bucket, Check, Gate, Layout, LogLine, Loop, Main, Roster, Turn, Usage, View } from '../types'
 import type { AgentRun, Flow, Phase, PlannedTask, SavvyPanel } from '../types'
@@ -217,6 +217,7 @@ const runs = atom({ plugin: 'control-tower', key: 'runs' } as const, [])
 const panel = atom({ plugin: 'control-tower', key: 'savvyPanel' } as const, {
   isCompact: false,
   isDoneCollapsed: false,
+  showAllDone: false,
   autoOpenedFor: '',
 })
 const savvyNow = atom({ plugin: 'control-tower', key: 'now' } as const, 0)
@@ -249,6 +250,12 @@ const STRINGS = {
     tokens: 'Tokens',
     time: 'Time',
     collapse: 'Collapse',
+    clearDone: 'clear',
+    earlier: 'earlier',
+    showFewer: 'show fewer',
+    agentOne: 'agent',
+    runningWord: 'running',
+    openPane: 'open',
     expand: 'Expand',
     running: 'Running',
     finished: 'Finished',
@@ -277,6 +284,12 @@ const STRINGS = {
     tokens: 'Токены',
     time: 'Время',
     collapse: 'Свернуть',
+    clearDone: 'очистить',
+    earlier: 'ранее',
+    showFewer: 'показать меньше',
+    agentOne: 'агент',
+    runningWord: 'работают',
+    openPane: 'открыть',
     expand: 'Развернуть',
     running: 'Работают',
     finished: 'Завершены',
@@ -861,6 +874,22 @@ const progressOf = (a: AgentRun): number | null => {
 
 const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
 
+/** The card's note: what a running agent is doing, or the first line of what a finished one found. */
+const noteOf = (a: AgentRun): string => (a.status === 'running' ? (a.doing ? `▸ ${a.doing}` : '') : a.result ? `» ${a.result}` : '')
+
+/** A card is taller by one line when it carries a note. */
+const cardHeight = (a: AgentRun): number => (noteOf(a) ? 80 : 66)
+
+// The crab says the status: it walks while running, dozes when done, lies tipped over when it failed.
+const moodCrab = (a: AgentRun): string => {
+  const body = crab(0, 14, costumeOf(a), false, a.status === 'running')
+  if (a.status === 'done')
+    return `${body}<text class="s" x="31" y="16" font-family="${FONT}" font-size="10" font-weight="600">z</text><text class="s" x="35" y="9" font-family="${FONT}" font-size="8" font-weight="600">z</text>`
+  if (a.status === 'failed')
+    return `<g transform="rotate(90 17 30)">${body}</g><path d="M30 6l6 6M36 6l-6 6" stroke="#D0453F" stroke-width="1.8" stroke-linecap="round"/>`
+  return body
+}
+
 const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const s = tr()
   const tier = tierOf(a.type)
@@ -877,17 +906,20 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const stepsW = Math.max(0, barW - textWidth(stats, 11) - 12)
   // Without reported steps the bar falls back to the context, drawn grey.
   const fillW = Math.round(barW * (progress ?? ctx / 100))
+  const note = noteOf(a)
+  // A note takes the line under the meta; the stats and the bar move down by it.
+  const dy = note ? 14 : 0
   return svg(
     W,
-    66,
-    `${crab(0, 14, costumeOf(a), false, a.status === 'running')}
+    cardHeight(a),
+    `${moodCrab(a)}
 <text class="t" x="42" y="18" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text x="42" y="34" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tier)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
-${steps && stepsW > 30 ? `<text class="t" x="42" y="49" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
-<text class="s" x="${42 + barW}" y="49" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
-<rect class="k" x="42" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="42" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
-${statusMark(W - 8, 16, a.status, color)}
-<line class="ln" x1="0" y1="65.5" x2="${W}" y2="65.5"/>`,
+${note ? `<text class="t" x="42" y="49" font-family="${FONT}" font-size="11">${xml(fitText(note, 11, textW + 22))}</text>` : ''}
+${steps && stepsW > 30 ? `<text class="t" x="42" y="${49 + dy}" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
+<text class="s" x="${42 + barW}" y="${49 + dy}" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
+<rect class="k" x="42" y="${55 + dy}" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="42" y="${55 + dy}" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
+<line class="ln" x1="0" y1="${65.5 + dy}" x2="${W}" y2="${65.5 + dy}"/>`,
   )
 }
 
@@ -1012,7 +1044,8 @@ function registerSavvy(on: On, options: PluginOptions) {
   // Each model request of a subagent: live context, tokens and cost.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const f = await read($, flow)
-    if (f === null || e.props.hasSurvey) return next(e)
+    if (e.props.hasSurvey) return next(e)
+    if (f === null) return crewBand($, e, next)
 
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
@@ -1067,6 +1100,43 @@ function registerSavvy(on: On, options: PluginOptions) {
   })
 }
 
+/** Above the prompt while agents run and no flow reports: their crabs walking, how many, how long. */
+async function crewBand($: EngineInterface, e: RenderInput<'AbovePrompt'>, next: (e: RenderInput<'AbovePrompt'>) => Promise<RenderElement>) {
+  const list = await read($, runs)
+  const running = list.filter(a => a.status === 'running')
+  if (running.length === 0) return next(e)
+  const ui = $.ui.resolve(e)
+  const { Box, Text, Button } = ui
+  const at = Math.max(await read($, savvyNow), ...running.map(a => a.startedAt))
+  const longest = Math.max(...running.map(a => elapsed(a, at)))
+  const summary = `${running.length} ${running.length === 1 ? tr().agentOne : tr().agentsCount} ${tr().runningWord} · ${fmtTime(longest)}`
+  const open = <Button key="crew-open" label={tr().openPane} plain dimColor onPress={() => void togglePane($)} />
+  if (e.surface === 'desktop' && 'Svg' in ui) {
+    const { Svg } = ui
+    const shown = running.slice(0, Math.max(1, Math.floor(((e.props.bodyColumns || 100) * 8 - 320) / 36)))
+    const W = shown.length * 36 + 8 + Math.ceil(textWidth(summary, 12))
+    const body = shown.map((a, i) => crab(i * 36, 0, costumeOf(a), false, true)).join('')
+    const text = `<text class="s" x="${shown.length * 36 + 8}" y="21" font-family="${FONT}" font-size="12" font-variant-numeric="tabular-nums">${xml(summary)}</text>`
+    return (
+      <Box flexDirection="row" alignItems="center" gap={1}>
+        <Svg source={svg(W, 32, body + text)} alt={summary} width={W} height={32} />
+        {open}
+      </Box>
+    )
+  }
+  const names = running.map(a => a.description || a.type).join(', ')
+  return (
+    <Box flexDirection="row" gap={1}>
+      <Text color={CLAY}>▣</Text>
+      <Text>{summary}</Text>
+      <Text dimColor wrap="truncate-end">
+        {names}
+      </Text>
+      {open}
+    </Box>
+  )
+}
+
 /** The savvy-progress half of the combined pane. */
 async function renderSavvy($: EngineInterface, e: RenderInput<'Pane'>) {
   const s = tr()
@@ -1102,6 +1172,27 @@ async function renderSavvy($: EngineInterface, e: RenderInput<'Pane'>) {
       onPress={() => update($, panel, prev => ({ ...prev, isDoneCollapsed: !prev.isDoneCollapsed }))}
     />
   )
+  // The latest few finished runs; the rest wait behind "+N earlier".
+  const DONE_SHOWN = 3
+  const shownDone = p.showAllDone ? finished : finished.slice(0, DONE_SHOWN)
+  const earlier = finished.length - shownDone.length
+  const doneHeader =
+    finished.length > 0 ? (
+      <Box key="done-head" flexDirection="row" justifyContent="space-between" alignItems="center">
+        {toggleDone}
+        <Button key="clear-done" label={s.clearDone} plain dimColor onPress={() => update($, runs, l => l.filter(a => a.status === 'running'))} />
+      </Box>
+    ) : null
+  const earlierButton = (
+    <Button
+      key="earlier"
+      label={p.showAllDone ? s.showFewer : `+${earlier} ${s.earlier}`}
+      plain
+      dimColor
+      onPress={() => update($, panel, prev => ({ ...prev, showAllDone: !prev.showAllDone }))}
+    />
+  )
+  const hasMoreDone = finished.length > DONE_SHOWN
   const isEmpty = list.length === 0 && planned.length === 0
   // Drawn inside a bordered box: its border and padding take 4 columns.
   const bodyCols = (e.props.bodyColumns || 40) - 4
@@ -1140,13 +1231,14 @@ async function renderSavvy($: EngineInterface, e: RenderInput<'Pane'>) {
         {isEmpty && <Text dimColor>{s.empty}</Text>}
         {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
         {running.map(a => (
-          <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} width={W} height={66} />
+          <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} width={W} height={cardHeight(a)} />
         ))}
-        {finished.length > 0 && toggleDone}
+        {doneHeader}
         {!p.isDoneCollapsed &&
-          finished.map(a => (
-            <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={W} height={66} />
+          shownDone.map(a => (
+            <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={W} height={cardHeight(a)} />
           ))}
+        {!p.isDoneCollapsed && hasMoreDone && earlierButton}
         {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
         {planned.map(pl => (
           <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={W} height={46} />
@@ -1179,6 +1271,12 @@ async function renderSavvy($: EngineInterface, e: RenderInput<'Pane'>) {
           {tier === 'other' ? a.type : tier} · {model}
           {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
         </Text>
+        {noteOf(a) ? (
+          <Text wrap="truncate-end">
+            {'  '}
+            {noteOf(a)}
+          </Text>
+        ) : null}
         <Text wrap="truncate-end">
           {'  '}
           {progress === null ? <Text dimColor>{ctxBar(ctx, barW)}</Text> : <Text color={color}>{ctxBar(progress * 100, barW)}</Text>}
@@ -1212,8 +1310,9 @@ async function renderSavvy($: EngineInterface, e: RenderInput<'Pane'>) {
           {isEmpty && <Text dimColor>{s.empty}</Text>}
           {running.length > 0 && <Text dimColor>{s.running} · {running.length}</Text>}
           {running.map(row)}
-          {finished.length > 0 && toggleDone}
-          {!p.isDoneCollapsed && finished.map(row)}
+          {doneHeader}
+          {!p.isDoneCollapsed && shownDone.map(row)}
+          {!p.isDoneCollapsed && hasMoreDone && earlierButton}
           {planned.length > 0 && <Text dimColor>{s.planned} · {planned.length}</Text>}
           {planned.map(pl => {
             const tier = pl.tier in TIER_COLOR ? pl.tier : 'other'
@@ -1384,6 +1483,7 @@ async function savvyTurnComplete($: Args<'turn.complete'>[0], e: Args<'turn.comp
           ...a,
           status: e.reason === 'answer' ? 'done' : 'failed',
           endedAt: at,
+          result: e.answer ? adviceLine(e.answer) : undefined,
           ...(fallback && e.usage
             ? {
                 model: e.usage.model || a.model,
@@ -1495,6 +1595,9 @@ export const register: Register = (on, options) => {
     if (back && a && a.ids.includes(back.from)) {
       const advice = adviceLine(back.body)
       if (advice && advice !== a.lastAdvice) await noteAdvice($, cfg, advice)
+    } else if (back) {
+      const card = (await getCards($)).find(c => c.id === back.from)
+      await say($, 'engine', `agent ${card ? cardTitle(card) : back.from.slice(0, 8)} finished`, 'done', back.from)
     } else if (e.text) {
       const p = promptLine(e.text)
       await say($, p.who, p.text)
@@ -1575,6 +1678,10 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     callLoop.set(e.tool_use_id, e.agentId ?? null)
+    if (e.agentId && e.tool !== STEP_TOOL && String(e.tool) !== 'SubagentHandback') {
+      const doing = shorten(describeInput(e.tool, e), 64)
+      await update($, runs, list => list.map(a => (a.agentId === e.agentId ? { ...a, doing } : a)))
+    }
     const ran = await next(e).finally(() => callLoop.delete(e.tool_use_id))
     const didRun = ran.deny === undefined
     // Settle this call's pending ask, if it had one; skip the write (and the redraw) otherwise.
@@ -1787,51 +1894,96 @@ export const register: Register = (on, options) => {
       )
 
     // ---- main
-    const effortN = { low: 1, medium: 2, high: 3, xhigh: 4, max: 4 }[m.effort] ?? 0
+    // One cell per level the engine names, low to max.
+    const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+    const effortN = EFFORTS.indexOf(m.effort) + 1
     const ctxGauge = u.pct !== null ? gauge(u.pct, 10) : null
+    // Rows read label, then value. Labels and details are dim, values plain, bold only the title;
+    // accent colours only the bars, the title and "working". Widths are in cells, so the columns
+    // line up even where a surface draws the text in a proportional font.
+    const LABEL_W = 8
+    // The first part of a value (a gauge and its percent) takes a fixed width, so what follows it,
+    // ctx's token count and usage's second limit, starts at the same cell on both rows.
+    const GAUGE_W = 21
+    const labelled = (key: string, label: string, value: RenderElement) => (
+      <Box key={key} flexDirection="row">
+        <Box width={LABEL_W} flexShrink={0}>
+          <Text dimColor>{label}</Text>
+        </Box>
+        {value}
+      </Box>
+    )
+    const pctColor = (pct: number) => (pct >= 80 ? C.warn : undefined)
+    const limitCell = (l: { kind: string; pct: number }) => {
+      const lg = gauge(l.pct, 5)
+      return (
+        <Text key={`limit-${l.kind}`} wrap="truncate">
+          <Text dimColor>{`${limitLabel(l.kind)} `}</Text>
+          <Text color={l.pct >= 80 ? C.warn : C.main}>{lg.on}</Text>
+          <Text color={C.faint}>{lg.off}</Text>
+          <Text color={pctColor(l.pct)}>{` ${Math.round(l.pct)}%`}</Text>
+        </Text>
+      )
+    }
+    const [limitA, limitB] = u.limits
     const mainPanel = (w: number) => (
       <Box flexDirection="column" borderStyle="round" borderColor={C.main} paddingX={1} width={w}>
         <Box justifyContent="space-between">
           <Text color={C.main} bold>
             {modelName} · main
           </Text>
-          <Text color={m.isRunning ? C.main : C.dim}>{m.isRunning ? '● working' : '○ idle'}</Text>
+          <Box flexDirection="row" columnGap={2}>
+            {u.costUsd !== null ? <Text>{fmtUsd(u.costUsd)}</Text> : null}
+            <Text color={m.isRunning ? C.main : undefined} dimColor={!m.isRunning}>
+              {m.isRunning ? '● working' : '○ idle'}
+            </Text>
+          </Box>
         </Box>
-        <Text wrap="truncate">
-          <Text dimColor>effort </Text>
-          <Text color={C.main}>{'▮'.repeat(effortN) + '▯'.repeat(4 - effortN)} </Text>
-          <Text color={C.main} bold>
-            {m.effort || '—'}
-          </Text>
-          {m.mode ? <Text dimColor>{`   mode ${m.mode}`}</Text> : null}
-          <Text dimColor>{`   ${m.steps} req`}</Text>
-        </Text>
-        {ctxGauge ? (
-          <Text wrap="truncate">
-            <Text dimColor>ctx </Text>
-            <Text color={u.pct !== null && u.pct >= 80 ? C.warn : C.main}>{ctxGauge.on}</Text>
-            <Text color={C.faint}>{ctxGauge.off}</Text>
-            <Text bold>{` ${Math.round(u.pct ?? 0)}%`}</Text>
-            {u.tokens !== null ? <Text dimColor>{` ${kTokens(u.tokens)}/${kTokens(u.window)}`}</Text> : null}
-            {u.compactions > 0 ? <Text color={C.amber}>{`  ⟲${u.compactions}`}</Text> : null}
-          </Text>
-        ) : null}
-        {u.costUsd !== null || u.limits.length > 0 ? (
-          <Text wrap="truncate">
-            {u.costUsd !== null ? <Text color={C.text}>{`${fmtUsd(u.costUsd)}   `}</Text> : null}
-            {u.limits.slice(0, 2).map(l => {
-              const lg = gauge(l.pct, 5)
-              return (
+        {labelled(
+          'effort',
+          'effort',
+          <Box flexDirection="row">
+            <Box width={GAUGE_W} flexShrink={0}>
+              <Text wrap="truncate">
+                <Text color={C.main}>{'▮'.repeat(effortN)}</Text>
+                <Text color={C.faint}>{'▯'.repeat(EFFORTS.length - effortN)}</Text>
+                <Text>{` ${m.effort || '—'}`}</Text>
+              </Text>
+            </Box>
+            {m.mode ? <Text dimColor>{m.mode}</Text> : null}
+          </Box>,
+        )}
+        {ctxGauge
+          ? labelled(
+              'ctx',
+              'ctx',
+              <Box flexDirection="row">
+                <Box width={GAUGE_W} flexShrink={0}>
+                  <Text wrap="truncate">
+                    <Text color={(u.pct ?? 0) >= 80 ? C.warn : C.main}>{ctxGauge.on}</Text>
+                    <Text color={C.faint}>{ctxGauge.off}</Text>
+                    <Text color={pctColor(u.pct ?? 0)}>{` ${Math.round(u.pct ?? 0)}%`}</Text>
+                  </Text>
+                </Box>
                 <Text wrap="truncate">
-                  <Text dimColor>{`${limitLabel(l.kind)} `}</Text>
-                  <Text color={l.pct >= 80 ? C.warn : C.main}>{lg.on}</Text>
-                  <Text color={C.faint}>{lg.off}</Text>
-                  <Text dimColor>{` ${Math.round(l.pct)}%  `}</Text>
+                  {u.tokens !== null ? <Text dimColor>{`${kTokens(u.tokens)}/${kTokens(u.window)}`}</Text> : null}
+                  {u.compactions > 0 ? <Text color={C.amber}>{`  ⟲${u.compactions}`}</Text> : null}
                 </Text>
-              )
-            })}
-          </Text>
-        ) : null}
+              </Box>,
+            )
+          : null}
+        {limitA
+          ? labelled(
+              'usage',
+              'usage',
+              <Box flexDirection="row">
+                <Box width={GAUGE_W} flexShrink={0}>
+                  {limitCell(limitA)}
+                </Box>
+                {limitB ? limitCell(limitB) : null}
+              </Box>,
+            )
+          : null}
       </Box>
     )
 

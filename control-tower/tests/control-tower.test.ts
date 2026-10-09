@@ -439,3 +439,75 @@ test('subagents show once, in the savvy list, not as dashboard cards or lanes', 
   expect(await ui.find({ text: /Write the parser tests/ })).toBeDefined() // the savvy list has it
   await ui.unmount()
 })
+
+// ---------------------------------------------------------------- agent list notes, log, band
+
+const band = (bodyColumns: number) => ({
+  plugin: 'control-tower',
+  component: 'AbovePrompt' as const,
+  requestId: 'band',
+  props: { bodyColumns, hasSurvey: false },
+})
+
+test('a running agent shows its latest call; a finished one shows what it found', async ($, on) => {
+  engine(on)
+  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'n1' }))
+  on('tool.call', () => ({ result: {}, text: 'ok' }))
+  await $.turn.start({ text: 'go', turnId: 'N1' })
+  await $.agent.spawn(spawn('general-purpose', 'Count the files'))
+  await $.tool.call({ tool: 'Read', file_path: '/repo/src/main.ts', agentId: 'n1', tool_use_id: 'n-c1' } as never)
+  const live = await $.ui.mount({ ...pane(64), surface: 'terminal' })
+  expect(await live.find({ text: /▸ Read → .*main\.ts/ })).toBeDefined()
+  await live.unmount()
+
+  await $.turn.complete({ answer: '**10 files**, mostly TypeScript', durationMs: 10, isAborted: false, turnId: 'N1b', agentId: 'n1', reason: 'answer' })
+  const done = await $.ui.mount({ ...pane(64), surface: 'terminal' })
+  expect(await done.find({ text: /» 10 files, mostly TypeScript/ })).toBeDefined()
+  await done.unmount()
+})
+
+test("an agent's hand-back is logged by its title, not its id", async ($, on) => {
+  engine(on)
+  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'hb1' }))
+  await $.turn.start({ text: 'go', turnId: 'B1' })
+  await $.agent.spawn(spawn('general-purpose', 'Measure file sizes'))
+  await $.turn.start({ text: '<agent-message from="hb1">\nThe report follows:\n  2187 register.tsx\n</agent-message>', turnId: 'B2' })
+  const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
+  expect(await ui.find({ text: /agent Measure file sizes finished/ })).toBeDefined()
+  expect(await ui.find({ text: /agent message from/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('only the latest three finished agents show until "+N earlier" is pressed', async ($, on) => {
+  engine(on)
+  let n = 0
+  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: `f${++n}` }))
+  await $.turn.start({ text: 'go', turnId: 'F0' })
+  for (const d of ['one', 'two', 'three', 'four', 'five']) await $.agent.spawn(spawn('general-purpose', `task ${d}`))
+  for (let i = 1; i <= 5; i++)
+    await $.turn.complete({ answer: `found ${i}`, durationMs: 1, isAborted: false, turnId: `F${i}`, agentId: `f${i}`, reason: 'answer' })
+  // Each finished card ends with its answer's first line; the log never shows it.
+  const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
+  expect(await ui.find({ text: /» found 5/ })).toBeDefined()
+  expect(await ui.find({ text: /» found 1/ })).toBeUndefined()
+  expect(await ui.find({ text: /\+2 earlier/ })).toBeDefined()
+  await ui.press({ key: 'earlier' })
+  expect(await ui.find({ text: /» found 1/ })).toBeDefined()
+  await ui.press({ key: 'clear-done' })
+  expect(await ui.find({ text: /» found 5/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('running agents walk above the prompt, and the band goes when they finish', async ($, on) => {
+  engine(on)
+  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'r1' }))
+  await $.turn.start({ text: 'go', turnId: 'R1' })
+  await $.agent.spawn(spawn('general-purpose', 'Scan the repo'))
+  const ui = await $.ui.mount({ ...band(100), surface: 'terminal' })
+  expect(await ui.find({ text: /1 agent running/ })).toBeDefined()
+  await ui.unmount()
+  await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'R2', agentId: 'r1', reason: 'answer' })
+  const after = await $.ui.mount({ ...band(100), surface: 'terminal' }).catch(() => null)
+  expect(after ? await after.find({ text: /agent running/ }) : undefined).toBeUndefined()
+  await after?.unmount()
+})
