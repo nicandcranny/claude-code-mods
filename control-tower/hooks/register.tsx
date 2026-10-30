@@ -1904,7 +1904,7 @@ export const register: Register = (on, options) => {
     const LABEL_W = 8
     // The first part of a value (a gauge and its percent) takes a fixed width, so what follows it,
     // ctx's token count and usage's second limit, starts at the same cell on both rows.
-    const GAUGE_W = 21
+    const GAUGE_W = 16
     const labelled = (key: string, label: string, value: RenderElement) => (
       <Box key={key} flexDirection="row">
         <Box width={LABEL_W} flexShrink={0}>
@@ -1919,8 +1919,8 @@ export const register: Register = (on, options) => {
       return (
         <Text key={`limit-${l.kind}`} wrap="truncate">
           <Text dimColor>{`${limitLabel(l.kind)} `}</Text>
-          <Text color={l.pct >= 80 ? C.warn : C.main}>{lg.on}</Text>
-          <Text color={C.faint}>{lg.off}</Text>
+          <Text mono color={l.pct >= 80 ? C.warn : C.main}>{lg.on}</Text>
+          <Text mono color={C.faint}>{lg.off}</Text>
           <Text color={pctColor(l.pct)}>{` ${Math.round(l.pct)}%`}</Text>
         </Text>
       )
@@ -1960,8 +1960,8 @@ export const register: Register = (on, options) => {
               <Box flexDirection="row">
                 <Box width={GAUGE_W} flexShrink={0}>
                   <Text wrap="truncate">
-                    <Text color={(u.pct ?? 0) >= 80 ? C.warn : C.main}>{ctxGauge.on}</Text>
-                    <Text color={C.faint}>{ctxGauge.off}</Text>
+                    <Text mono color={(u.pct ?? 0) >= 80 ? C.warn : C.main}>{ctxGauge.on}</Text>
+                    <Text mono color={C.faint}>{ctxGauge.off}</Text>
                     <Text color={pctColor(u.pct ?? 0)}>{` ${Math.round(u.pct ?? 0)}%`}</Text>
                   </Text>
                 </Box>
@@ -2339,8 +2339,8 @@ export const register: Register = (on, options) => {
             </Text>
             <Text color={m.isRunning ? C.main : C.dim}>{m.isRunning ? ' ● working' : ' ○ idle'}</Text>
             {mg ? <Text dimColor> · ctx </Text> : null}
-            {mg ? <Text color={(u.pct ?? 0) >= 80 ? C.warn : C.main}>{mg.on}</Text> : null}
-            {mg ? <Text color={C.faint}>{mg.off}</Text> : null}
+            {mg ? <Text mono color={(u.pct ?? 0) >= 80 ? C.warn : C.main}>{mg.on}</Text> : null}
+            {mg ? <Text mono color={C.faint}>{mg.off}</Text> : null}
             {mg ? <Text>{` ${Math.round(u.pct ?? 0)}%`}</Text> : null}
             {u.compactions > 0 ? <Text color={C.amber}>{` ⟲${u.compactions}`}</Text> : null}
             {u.costUsd !== null ? <Text dimColor>{` · ${fmtUsd(u.costUsd)}`}</Text> : null}
